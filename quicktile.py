@@ -73,6 +73,7 @@ except: # TODO: figure out what signal other than ImportError to catch
 
 XDG_CONFIG_DIR = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
 
+
 #TODO: Figure out how best to put this in the config file.
 POSITIONS = {
     'left'           : (
@@ -179,6 +180,7 @@ class WindowManager(object):
         self._root = screen or gtk.gdk.screen_get_default()
         self.commands = commands
         self.ignore_workarea = ignore_workarea
+        self.profileindex = 0
 
     def cmd_cycleMonitors(self, window=None):
         """
@@ -335,7 +337,7 @@ class WindowManager(object):
         @type command: C{str}
         @rtype: C{bool}
         """
-        int_command = self.commands.get(command, None)
+        int_command = self.commands[self.profileindex].get(command, None)
         if isinstance(int_command, (tuple, list)):
             self.cycleDimensions(int_command)
             return True
@@ -464,6 +466,13 @@ class WindowManager(object):
         win.move_resize(geom.x + monitor.x, geom.y + monitor.y,
                 geom.width - (border * 2), geom.height - (titlebar + border))
 
+    def cmd_cycleProfile(self):
+        self.profileindex += 1
+        self.profileindex %= len(self.commands)
+
+    def currentcommands(self):
+        return self.commands[self.profileindex]
+
 class QuickTileApp(object):
     def __init__(self, wm, keys=None, modkeys=None):
         """@todo: document these arguments"""
@@ -583,6 +592,7 @@ if __name__ == '__main__':
 
     # Load the config from file if present
     # TODO: Refactor all this
+    '''
     cfg_path = os.path.join(XDG_CONFIG_DIR, 'quicktile.cfg')
     config = RawConfigParser()
     config.optionxform = str # Make keys case-sensitive
@@ -620,6 +630,17 @@ if __name__ == '__main__':
         cfg_file.close()
 
     ignore_workarea = (not config.getboolean('general', 'UseWorkarea')) or opts.no_workarea
+    '''
+
+    # Just use an import as config
+    sys.path.append(XDG_CONFIG_DIR)
+    import quicktilecfg as cfg
+
+    POSITIONS = cfg.profiles
+    ignore_workarea = cfg.general.get('UseWorkarea', True)
+    keymap = cfg.keys
+    modkeys = cfg.general.get('ModMask', 'Control Mod1').split(" ")
+
 
     wm = WindowManager(POSITIONS, ignore_workarea=ignore_workarea)
     app = QuickTileApp(wm, keymap, modkeys=modkeys)
@@ -638,9 +659,9 @@ if __name__ == '__main__':
             #FIXME: What's the proper exit code for "library not found"?
 
     elif not opts.daemonize:
-        badArgs = [x for x in args if x not in wm.commands]
+        badArgs = [x for x in args if x not in wm.currentcommands() ]
         if not args or badArgs or opts.showArgs:
-            validArgs = sorted(wm.commands)
+            validArgs = sorted( wm.currentcommands() )
 
             if badArgs:
                 print "Invalid argument(s): %s" % ' '.join(badArgs)
@@ -655,3 +676,4 @@ if __name__ == '__main__':
             wm.doCommand(arg)
         while gtk.events_pending():
             gtk.main_iteration()
+
